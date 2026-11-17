@@ -1,0 +1,439 @@
+Lab 2 – polecenia wykonane w konsoli (lstk aws = aws --endpoint-url http://localhost.localstack.cloud:4566)
+Data: 2026-11-17, LocalStack 2026.10.7 uruchomiony przez Docker Compose (compose.yaml), lstk 1.4.5
+Każdy blok: '$ polecenie' i pod nim wynik z terminala.
+
+### 0. Logowanie i narzędzia
+$ npm install -g @localstack/lstk
+$ lstk --version
+lstk 1.4.5
+$ lstk login
+Auth request confirmed, exchanging for token... Fetching license token...
+(token LOCALSTACK_AUTH_TOKEN zapisany lokalnie w .env – plik w .gitignore, NIE jest w repozytorium)
+
+### 1. Środowisko
+$ docker compose up -d
+ Container localstack-main Running 
+
+$ docker compose ps
+NAME              IMAGE                             COMMAND                  SERVICE      CREATED          STATUS                    PORTS
+localstack-main   localstack/localstack:2026.10.7   "docker-entrypoint.sh"   localstack   49 seconds ago   Up 48 seconds (healthy)   127.0.0.1:4510-4559->4510-4559/tcp, 127.0.0.1:4566->4566/tcp
+
+$ curl -s http://localhost:4566/_localstack/info
+{"version": "2026.10.7:af52d629", "edition": "pro", "is_license_activated": true, "session_id": "7838256f-496f-4682-9f17-7b1e49989cec", "machine_id": "dkr_6ad17e4216ff", "system": "Docker Desktop,6.6.114.1-microsoft-standard-WSL2,x86_64", "is_docker": true, "server_time_utc": "2026-11-17T15:55:12", "uptime": 47}
+
+### 2. S3 Website
+$ lstk aws s3 mb s3://raport-koszykow-www
+make_bucket: raport-koszykow-www
+
+$ lstk aws s3 cp www/index.html s3://raport-koszykow-www/index.html --content-type text/html; charset=utf-8
+Completed 742 Bytes/742 Bytes (29.6 KiB/s) with 1 file(s) remainingupload: www\index.html to s3://raport-koszykow-www/index.html      
+
+$ lstk aws s3 cp www/style.css s3://raport-koszykow-www/style.css --content-type text/css; charset=utf-8
+Completed 782 Bytes/782 Bytes (25.6 KiB/s) with 1 file(s) remainingupload: www\style.css to s3://raport-koszykow-www/style.css        
+
+$ lstk aws s3 website s3://raport-koszykow-www --index-document index.html
+
+$ lstk aws s3api put-bucket-policy --bucket raport-koszykow-www --policy file://bucket-policy.json
+
+$ lstk aws s3api get-bucket-website --bucket raport-koszykow-www
+{
+    "IndexDocument": {
+        "Suffix": "index.html"
+    }
+}
+
+$ lstk aws s3 ls s3://raport-koszykow-www
+2026-11-17 17:55:17        742 index.html
+2026-11-17 17:55:19        782 style.css
+
+$ curl -s -i http://raport-koszykow-www.s3-website.localhost.localstack.cloud:4566/
+HTTP/1.1 200 OK
+Server: TwistedWeb/26.10.0
+Date: Tue, 17 Nov 2026 15:55:30 GMT
+Content-Type: text/html; charset=utf-8
+etag: "6f4b0402ea47609d179d4116c7504824"
+x-localstack: 2026.10.7
+Transfer-Encoding: chunked
+
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Raport koszyków</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="karta">
+    <h1>Raport koszyków</h1>
+    <p>Zestawienie porzuconych i opłaconych koszyków w sklepie internetowym za ostatni tydzień.</p>
+    <p id="zdanie">Wersja 1: strona statyczna serwowana z bucketu S3.</p>
+    <table>
+      <tr><th>Dzień</th><th>Opłacone</th><th>Porzucone</th></tr>
+      <tr><td>Poniedziałek</td><td>42</td><td>17</td></tr>
+      <tr><td>Wtorek</td><td>38</td><td>21</td></tr>
+      <tr><td>Środa</td><td>51</td><td>12</td></tr>
+    </table>
+  </main>
+</body>
+</html>
+
+### 2b. Zmiana zdania w index.html i ponowna publikacja
+$ lstk aws s3 cp www/index.html s3://raport-koszykow-www/index.html --content-type text/html; charset=utf-8
+Completed 779 Bytes/779 Bytes (21.4 KiB/s) with 1 file(s) remainingupload: www\index.html to s3://raport-koszykow-www/index.html      
+
+$ curl -s -i http://raport-koszykow-www.s3-website.localhost.localstack.cloud:4566/
+HTTP/1.1 200 OK
+Server: TwistedWeb/26.10.0
+Date: Tue, 17 Nov 2026 15:56:18 GMT
+Content-Type: text/html; charset=utf-8
+etag: "ecfcff5f84a222f2f431397148dbdcaf"
+x-localstack: 2026.10.7
+Transfer-Encoding: chunked
+
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Raport koszyków</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="karta">
+    <h1>Raport koszyków</h1>
+    <p>Zestawienie porzuconych i opłaconych koszyków w sklepie internetowym za ostatni tydzień.</p>
+    <p id="zdanie">Wersja 2: zdanie zmienione po publikacji – plik index.html przesłany ponownie do S3.</p>
+    <table>
+      <tr><th>Dzień</th><th>Opłacone</th><th>Porzucone</th></tr>
+      <tr><td>Poniedziałek</td><td>42</td><td>17</td></tr>
+      <tr><td>Wtorek</td><td>38</td><td>21</td></tr>
+      <tr><td>Środa</td><td>51</td><td>12</td></tr>
+    </table>
+  </main>
+</body>
+</html>
+
+$ curl -s -o /dev/null -w style.css -> HTTP %{http_code}, %{content_type}\n http://raport-koszykow-www.s3-website.localhost.localstack.cloud:4566/style.css
+style.css -> HTTP 200, text/css; charset=utf-8
+
+### 3. Lambda + szablon w osobnym buckecie
+$ lstk aws s3 mb s3://raport-koszykow-szablony
+make_bucket: raport-koszykow-szablony
+
+$ lstk aws s3 cp szablon/template.html s3://raport-koszykow-szablony/template.html --content-type text/html; charset=utf-8
+Completed 1.5 KiB/1.5 KiB (56.2 KiB/s) with 1 file(s) remainingupload: szablon\template.html to s3://raport-koszykow-szablony/template.html
+
+$ lstk aws s3api get-bucket-policy-status --bucket raport-koszykow-szablony
+
+An error occurred (NoSuchBucketPolicy) when calling the GetBucketPolicyStatus operation: The bucket policy does not exist
+
+$ curl -s -o /dev/null -w anonimowy odczyt szablonu -> HTTP %{http_code}\n http://raport-koszykow-szablony.s3.localhost.localstack.cloud:4566/template.html
+anonimowy odczyt szablonu -> HTTP 200
+
+$ python -c import zipfile;print(zipfile.ZipFile('build/funkcja.zip').namelist())
+['handler.py']
+
+$ lstk aws lambda create-function --function-name raport-koszykow-fn --runtime python3.12 --handler handler.lambda_handler --role arn:aws:iam::000000000000:role/lambda-role --zip-file fileb://build/funkcja.zip --environment Variables={TEMPLATE_BUCKET=raport-koszykow-szablony,TEMPLATE_KEY=template.html} --tags {"_custom_id_":"raport-koszykow"} --timeout 15 --query {Name:FunctionName,Runtime:Runtime,State:State}
+{
+    "Name": "raport-koszykow-fn",
+    "Runtime": "python3.12",
+    "State": "Pending"
+}
+
+$ lstk aws lambda wait function-active-v2 --function-name raport-koszykow-fn
+
+$ lstk aws lambda create-function-url-config --function-name raport-koszykow-fn --auth-type NONE
+{
+    "FunctionUrl": "http://raport-koszykow.lambda-url.us-east-1.localhost.localstack.cloud:4566/",
+    "FunctionArn": "arn:aws:lambda:us-east-1:000000000000:function:raport-koszykow-fn",
+    "AuthType": "NONE",
+    "CreationTime": "2026-11-17T15:57:28.721+0000"
+}
+
+$ lstk aws lambda add-permission --function-name raport-koszykow-fn --statement-id publiczny-url --action lambda:InvokeFunctionUrl --principal * --function-url-auth-type NONE --query Statement --output text
+{"Sid": "publiczny-url", "Effect": "Allow", "Action": "lambda:InvokeFunctionUrl", "Resource": "arn:aws:lambda:us-east-1:000000000000:function:raport-koszykow-fn", "Principal": "*", "Condition": {"StringEquals": {"lambda:FunctionUrlAuthType": "NONE"}}}
+
+### 3b. Testy Function URL
+$ curl -s -i http://raport-koszykow.lambda-url.us-east-1.localhost.localstack.cloud:4566/?imie=Ola
+HTTP/1.1 200 OK
+Server: TwistedWeb/26.10.0
+Date: Tue, 17 Nov 2026 15:57:36 GMT
+Content-Type: text/html; charset=utf-8
+Connection: keep-alive
+x-amzn-requestid: 226b597f-52e6-4081-b41e-e12b9e766759
+x-amzn-trace-id: 5813b0a5-cf18-42be-9506-3393a8e58682
+Content-Length: 1489
+x-localstack: 2026.10.7
+
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Raport koszyków</title>
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Segoe UI", Arial, sans-serif;
+      background: linear-gradient(135deg, #0b3d2e, #1f7a5a);
+      color: #1b1b1b;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .karta {
+      background: #fffbe6;
+      border: 6px solid #f2b705;
+      border-radius: 16px;
+      padding: 32px 40px;
+      max-width: 640px;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+    }
+    h1 { margin-top: 0; color: #c2410c; letter-spacing: 1px; }
+    #zdanie { font-weight: bold; color: #0b3d2e; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #ccc; padding: 6px 10px; text-align: left; }
+    th { background: #f2b705; }
+  </style>
+</head>
+<body>
+  <main class="karta">
+    <h1>Raport dla Ola</h1>
+    <p>Zestawienie porzuconych i opłaconych koszyków w sklepie internetowym za ostatni tydzień.</p>
+    <p id="zdanie">Wariant 2: strona generowana przez funkcję Lambda z szablonu w S3.</p>
+    <table>
+      <tr><th>Dzień</th><th>Opłacone</th><th>Porzucone</th></tr>
+      <tr><td>Poniedziałek</td><td>42</td><td>17</td></tr>
+      <tr><td>Wtorek</td><td>38</td><td>21</td></tr>
+      <tr><td>Środa</td><td>51</td><td>12</td></tr>
+    </table>
+  </main>
+</body>
+</html>
+
+$ curl -s -i http://raport-koszykow.lambda-url.us-east-1.localhost.localstack.cloud:4566/?imie=Jan
+HTTP/1.1 200 OK
+Server: TwistedWeb/26.10.0
+Date: Tue, 17 Nov 2026 15:57:40 GMT
+Content-Type: text/html; charset=utf-8
+Connection: keep-alive
+x-amzn-requestid: b6a7de7c-c895-4006-90b8-e37d4b7be11f
+x-amzn-trace-id: 0fb0a1ec-9fa0-48d1-8243-d34deb7bb247
+Content-Length: 1489
+x-localstack: 2026.10.7
+
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Raport koszyków</title>
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Segoe UI", Arial, sans-serif;
+      background: linear-gradient(135deg, #0b3d2e, #1f7a5a);
+      color: #1b1b1b;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .karta {
+      background: #fffbe6;
+      border: 6px solid #f2b705;
+      border-radius: 16px;
+      padding: 32px 40px;
+      max-width: 640px;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+    }
+    h1 { margin-top: 0; color: #c2410c; letter-spacing: 1px; }
+    #zdanie { font-weight: bold; color: #0b3d2e; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #ccc; padding: 6px 10px; text-align: left; }
+    th { background: #f2b705; }
+  </style>
+</head>
+<body>
+  <main class="karta">
+    <h1>Raport dla Jan</h1>
+    <p>Zestawienie porzuconych i opłaconych koszyków w sklepie internetowym za ostatni tydzień.</p>
+    <p id="zdanie">Wariant 2: strona generowana przez funkcję Lambda z szablonu w S3.</p>
+    <table>
+      <tr><th>Dzień</th><th>Opłacone</th><th>Porzucone</th></tr>
+      <tr><td>Poniedziałek</td><td>42</td><td>17</td></tr>
+      <tr><td>Wtorek</td><td>38</td><td>21</td></tr>
+      <tr><td>Środa</td><td>51</td><td>12</td></tr>
+    </table>
+  </main>
+</body>
+</html>
+
+$ curl -s -i http://raport-koszykow.lambda-url.us-east-1.localhost.localstack.cloud:4566/
+HTTP/1.1 400 BAD REQUEST
+Server: TwistedWeb/26.10.0
+Date: Tue, 17 Nov 2026 15:57:41 GMT
+Content-Type: text/html; charset=utf-8
+Connection: keep-alive
+x-amzn-requestid: 3d959eb1-aadd-4091-a5c0-42b577cf62f5
+x-amzn-trace-id: 8324557b-970d-42cd-8367-b336546f264f
+Content-Length: 147
+x-localstack: 2026.10.7
+
+<!DOCTYPE html><html lang="pl"><meta charset="utf-8"><h1>400 – brak parametru</h1><p>Podaj imię w adresie, np. <code>?imie=Ola</code></p></html>
+
+$ curl -s -i http://raport-koszykow.lambda-url.us-east-1.localhost.localstack.cloud:4566/?imie=
+HTTP/1.1 400 BAD REQUEST
+Server: TwistedWeb/26.10.0
+Date: Tue, 17 Nov 2026 15:57:41 GMT
+Content-Type: text/html; charset=utf-8
+Connection: keep-alive
+x-amzn-requestid: 679ff223-77bd-465a-9668-dc2c8442b6ee
+x-amzn-trace-id: f7ca4307-08c6-4d72-9ebd-1a4559021f7b
+Content-Length: 147
+x-localstack: 2026.10.7
+
+<!DOCTYPE html><html lang="pl"><meta charset="utf-8"><h1>400 – brak parametru</h1><p>Podaj imię w adresie, np. <code>?imie=Ola</code></p></html>
+
+$ curl -s http://raport-koszykow.lambda-url.us-east-1.localhost.localstack.cloud:4566/?imie=%3Cscript%3Ealert(1)%3C%2Fscript%3E%20%26%20%22Ola%22
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Raport koszyków</title>
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Segoe UI", Arial, sans-serif;
+      background: linear-gradient(135deg, #0b3d2e, #1f7a5a);
+      color: #1b1b1b;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .karta {
+      background: #fffbe6;
+      border: 6px solid #f2b705;
+      border-radius: 16px;
+      padding: 32px 40px;
+      max-width: 640px;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+    }
+    h1 { margin-top: 0; color: #c2410c; letter-spacing: 1px; }
+    #zdanie { font-weight: bold; color: #0b3d2e; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #ccc; padding: 6px 10px; text-align: left; }
+    th { background: #f2b705; }
+  </style>
+</head>
+<body>
+  <main class="karta">
+    <h1>Raport dla &lt;script&gt;alert(1)&lt;/script&gt; &amp; &quot;Ola&quot;</h1>
+    <p>Zestawienie porzuconych i opłaconych koszyków w sklepie internetowym za ostatni tydzień.</p>
+    <p id="zdanie">Wariant 2: strona generowana przez funkcję Lambda z szablonu w S3.</p>
+    <table>
+      <tr><th>Dzień</th><th>Opłacone</th><th>Porzucone</th></tr>
+      <tr><td>Poniedziałek</td><td>42</td><td>17</td></tr>
+      <tr><td>Wtorek</td><td>38</td><td>21</td></tr>
+      <tr><td>Środa</td><td>51</td><td>12</td></tr>
+    </table>
+  </main>
+</body>
+</html>
+
+### 3c. Podmiana szablonu w S3 (bez ponownego wdrażania funkcji)
+$ lstk aws lambda get-function --function-name raport-koszykow-fn --query Configuration.[LastModified,CodeSha256] --output text
+2026-11-17T15:56:49.125+0000	PzAiOp3afwREqwlOpnlDInmcm0evpYM0hYe538cOtzw=
+
+$ lstk aws s3 cp szablon/template.html s3://raport-koszykow-szablony/template.html --content-type text/html; charset=utf-8
+Completed 1.6 KiB/1.6 KiB (45.2 KiB/s) with 1 file(s) remainingupload: szablon\template.html to s3://raport-koszykow-szablony/template.html
+
+$ lstk aws s3api head-object --bucket raport-koszykow-szablony --key template.html --query [LastModified,ETag,ContentLength] --output text
+Tue, 17 Nov 2026 15:58:18 GMT	"40c4d46739d44f046059c55109a8c051"	1676
+
+$ curl -s -i http://raport-koszykow.lambda-url.us-east-1.localhost.localstack.cloud:4566/?imie=Ola
+HTTP/1.1 200 OK
+Server: TwistedWeb/26.10.0
+Date: Tue, 17 Nov 2026 15:58:21 GMT
+Content-Type: text/html; charset=utf-8
+Connection: keep-alive
+x-amzn-requestid: 52b7f6fc-9447-41f2-b35d-151a31591cb3
+x-amzn-trace-id: f7975e24-ed2f-480a-bd91-9155ab370aa7
+Content-Length: 1671
+x-localstack: 2026.10.7
+
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Raport koszyków</title>
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Segoe UI", Arial, sans-serif;
+      background: linear-gradient(135deg, #0b3d2e, #1f7a5a);
+      color: #1b1b1b;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .karta {
+      background: #fffbe6;
+      border: 6px solid #f2b705;
+      border-radius: 16px;
+      padding: 32px 40px;
+      max-width: 640px;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+    }
+    h1 { margin-top: 0; color: #c2410c; letter-spacing: 1px; }
+    #zdanie { font-weight: bold; color: #0b3d2e; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #ccc; padding: 6px 10px; text-align: left; }
+    th { background: #f2b705; }
+    .nowe { background: #fde68a; padding: 6px 10px; border-left: 6px solid #c2410c; }
+  </style>
+</head>
+<body>
+  <main class="karta">
+    <h1>Raport dla Ola</h1>
+    <p>Zestawienie porzuconych i opłaconych koszyków w sklepie internetowym za ostatni tydzień.</p>
+    <p id="zdanie">Wariant 2: strona generowana przez funkcję Lambda z szablonu w S3.</p>
+    <p class="nowe">Nowe zdanie: szablon podmieniony w S3 bez ponownego wdrażania funkcji.</p>
+    <table>
+      <tr><th>Dzień</th><th>Opłacone</th><th>Porzucone</th></tr>
+      <tr><td>Poniedziałek</td><td>42</td><td>17</td></tr>
+      <tr><td>Wtorek</td><td>38</td><td>21</td></tr>
+      <tr><td>Środa</td><td>51</td><td>12</td></tr>
+    </table>
+  </main>
+</body>
+</html>
+
+$ lstk aws lambda get-function --function-name raport-koszykow-fn --query Configuration.[LastModified,CodeSha256] --output text
+2026-11-17T15:56:49.125+0000	PzAiOp3afwREqwlOpnlDInmcm0evpYM0hYe538cOtzw=
+
+### 3d. Odczyt szablonu z S3 - nadal zawiera {{IMIE}}
+$ lstk aws s3 cp s3://raport-koszykow-szablony/template.html build/template-z-s3.html
+Completed 1.6 KiB/1.6 KiB (59.2 KiB/s) with 1 file(s) remainingdownload: s3://raport-koszykow-szablony/template.html to build\template-z-s3.html
+
+$ grep -n -E IMIE|nowe"> build/template-z-s3.html
+36:    <h1>Raport dla {{IMIE}}</h1>
+39:    <p class="nowe">Nowe zdanie: szablon podmieniony w S3 bez ponownego wdrażania funkcji.</p>
+
+### 4. Stan końcowy
+$ lstk aws s3 ls
+2026-11-17 17:56:39 raport-koszykow-szablony
+2026-11-17 17:55:14 raport-koszykow-www
+
+$ lstk aws lambda list-functions --query Functions[].[FunctionName,Runtime,Handler] --output text
+raport-koszykow-fn	python3.12	handler.lambda_handler
+
+$ lstk aws lambda get-function-url-config --function-name raport-koszykow-fn --query FunctionUrl --output text
+http://raport-koszykow.lambda-url.us-east-1.localhost.localstack.cloud:4566/
+

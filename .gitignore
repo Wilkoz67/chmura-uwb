@@ -1,0 +1,5 @@
+.env
+volume/
+build/
+*.zip
+__pycache__/

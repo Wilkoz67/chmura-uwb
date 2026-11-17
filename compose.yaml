@@ -1,0 +1,19 @@
+services:
+  localstack:
+    container_name: localstack-main
+    image: localstack/localstack:2026.10.7
+    ports:
+      # tylko lokalnie (127.0.0.1), nie na wszystkich interfejsach
+      - "127.0.0.1:4566:4566"            # LocalStack Gateway
+      - "127.0.0.1:4510-4559:4510-4559"  # zakres portów usług zewnętrznych
+    environment:
+      # token z lokalnego pliku .env (plik jest w .gitignore)
+      - LOCALSTACK_AUTH_TOKEN=${LOCALSTACK_AUTH_TOKEN:?Ustaw LOCALSTACK_AUTH_TOKEN w pliku .env}
+      - SERVICES=s3,lambda,iam,sts,logs
+      - DEBUG=${DEBUG:-0}
+      - AWS_DEFAULT_REGION=us-east-1
+    volumes:
+      - "./volume:/var/lib/localstack"
+      # Lambda w LocalStack uruchamia funkcje w osobnych kontenerach Dockera,
+      # dlatego emulator potrzebuje dostępu do gniazda Dockera hosta
+      - "/var/run/docker.sock:/var/run/docker.sock"
